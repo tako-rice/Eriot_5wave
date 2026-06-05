@@ -1,0 +1,226 @@
+//@version=6
+indicator("Impulse Structure Wave Count v1", overlay = true, max_labels_count = 500, max_lines_count = 500)
+
+//--------------------------------------------------
+// Settings
+//--------------------------------------------------
+leftBars  = input.int(6, "Swing Left Bars", minval = 1)
+rightBars = input.int(6, "Swing Right Bars", minval = 1)
+
+showLabels = input.bool(true, "Show Labels")
+showZigZag = input.bool(true, "Show Structure Lines")
+
+labelAtrOffset = input.float(0.45, "Label Offset ATR", minval = 0.0, step = 0.05)
+
+upColor   = input.color(color.aqua, "Uptrend Color")
+downColor = input.color(color.red, "Downtrend Color")
+lineColor = input.color(color.white, "Structure Line Color")
+lineWidth = input.int(2, "Line Width", minval = 1, maxval = 5)
+
+//--------------------------------------------------
+// Swing High / Swing Low
+//--------------------------------------------------
+swingHigh = ta.pivothigh(high, leftBars, rightBars)
+swingLow  = ta.pivotlow(low, leftBars, rightBars)
+
+atrValue = ta.atr(14)
+labelOffset = atrValue * labelAtrOffset
+
+//--------------------------------------------------
+// State
+//--------------------------------------------------
+var int trend = 0
+//  1 = uptrend
+// -1 = downtrend
+//  0 = unknown
+
+var int waveCount = 0
+
+var int lastPivotType = 0
+//  1 = high
+// -1 = low
+
+var int lastPivotBar = na
+var float lastPivotPrice = na
+
+var int lastHighBar = na
+var float lastHighPrice = na
+
+var int lastLowBar = na
+var float lastLowPrice = na
+
+var label lastPivotLabel = na
+var line lastStructureLine = na
+
+//--------------------------------------------------
+// Label function
+//--------------------------------------------------
+f_makeLabel(int x, float y, int pivotType, int trendDirection, int countNumber) =>
+    label newLabel = na
+
+    color labelColor = trendDirection == 1 ? upColor : downColor
+    string pivotText = pivotType == 1 ? "SH" : "SL"
+    string labelText = pivotText + "\n" + str.tostring(countNumber)
+
+    if pivotType == 1
+        newLabel := label.new(
+             x,
+             y + labelOffset,
+             labelText,
+             style = label.style_label_down,
+             color = color.new(labelColor, 80),
+             textcolor = labelColor,
+             size = size.tiny
+        )
+
+    if pivotType == -1
+        newLabel := label.new(
+             x,
+             y - labelOffset,
+             labelText,
+             style = label.style_label_up,
+             color = color.new(labelColor, 80),
+             textcolor = labelColor,
+             size = size.tiny
+        )
+
+    newLabel
+
+//--------------------------------------------------
+// Trend change by close
+//--------------------------------------------------
+if trend == 1 and not na(lastLowPrice)
+    if close < lastLowPrice
+        trend := -1
+        waveCount := 0
+
+if trend == -1 and not na(lastHighPrice)
+    if close > lastHighPrice
+        trend := 1
+        waveCount := 0
+
+//--------------------------------------------------
+// Swing High process
+//--------------------------------------------------
+if not na(swingHigh)
+    int pivotBar = bar_index - rightBars
+    float pivotPrice = swingHigh
+    int pivotType = 1
+
+    bool accept = false
+    bool replaceLast = false
+
+    if na(lastHighPrice)
+        accept := true
+
+    if not na(lastHighPrice)
+        if trend == 1 and pivotPrice > lastHighPrice
+            accept := true
+
+        if trend == -1 and pivotPrice < lastHighPrice and lastPivotType == -1
+            accept := true
+
+    if lastPivotType == pivotType and accept
+        replaceLast := true
+
+    if accept
+        if trend == 0
+            if not na(lastLowPrice) and pivotPrice > lastHighPrice
+                trend := 1
+
+        if trend == 0
+            trend := 1
+
+        if replaceLast
+            if not na(lastPivotLabel)
+                label.delete(lastPivotLabel)
+                lastPivotLabel := na
+
+            if not na(lastStructureLine)
+                line.set_x2(lastStructureLine, pivotBar)
+                line.set_y2(lastStructureLine, pivotPrice)
+        else
+            waveCount += 1
+
+            if showZigZag and not na(lastPivotBar) and not na(lastPivotPrice)
+                lastStructureLine := line.new(
+                     lastPivotBar,
+                     lastPivotPrice,
+                     pivotBar,
+                     pivotPrice,
+                     color = lineColor,
+                     width = lineWidth
+                )
+
+        if showLabels
+            lastPivotLabel := f_makeLabel(pivotBar, pivotPrice, pivotType, trend, waveCount)
+
+        lastPivotType := pivotType
+        lastPivotBar := pivotBar
+        lastPivotPrice := pivotPrice
+
+        lastHighBar := pivotBar
+        lastHighPrice := pivotPrice
+
+//--------------------------------------------------
+// Swing Low process
+//--------------------------------------------------
+if not na(swingLow)
+    int pivotBar = bar_index - rightBars
+    float pivotPrice = swingLow
+    int pivotType = -1
+
+    bool accept = false
+    bool replaceLast = false
+
+    if na(lastLowPrice)
+        accept := true
+
+    if not na(lastLowPrice)
+        if trend == -1 and pivotPrice < lastLowPrice
+            accept := true
+
+        if trend == 1 and pivotPrice > lastLowPrice and lastPivotType == 1
+            accept := true
+
+    if lastPivotType == pivotType and accept
+        replaceLast := true
+
+    if accept
+        if trend == 0
+            if not na(lastHighPrice) and pivotPrice < lastLowPrice
+                trend := -1
+
+        if trend == 0
+            trend := -1
+
+        if replaceLast
+            if not na(lastPivotLabel)
+                label.delete(lastPivotLabel)
+                lastPivotLabel := na
+
+            if not na(lastStructureLine)
+                line.set_x2(lastStructureLine, pivotBar)
+                line.set_y2(lastStructureLine, pivotPrice)
+        else
+            waveCount += 1
+
+            if showZigZag and not na(lastPivotBar) and not na(lastPivotPrice)
+                lastStructureLine := line.new(
+                     lastPivotBar,
+                     lastPivotPrice,
+                     pivotBar,
+                     pivotPrice,
+                     color = lineColor,
+                     width = lineWidth
+                )
+
+        if showLabels
+            lastPivotLabel := f_makeLabel(pivotBar, pivotPrice, pivotType, trend, waveCount)
+
+        lastPivotType := pivotType
+        lastPivotBar := pivotBar
+        lastPivotPrice := pivotPrice
+
+        lastLowBar := pivotBar
+        lastLowPrice := pivotPrice
