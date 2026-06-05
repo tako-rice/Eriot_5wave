@@ -1,0 +1,20 @@
+//@version=6
+indicator("Impulse Structure Wave Count v1", overlay = true, max_labels_count = 500, max_lines_count = 500)
+
+//--------------------------------------------------
+// Settings
+//--------------------------------------------------
+leftBars  = input.int(6, "Swing Left Bars", minval = 1)
+rightBars = input.int(6, "Swing Right Bars", minval = 1)
+
+showLabels = input.bool(true, "Show Labels")
+showZigZag = input.bool(true, "Show Structure Lines")
+
+labelAtrOffset = input.float(0.45, "Label Offset ATR", minval = 0.0, step = 0.05)
+
+upColor   = input.color(color.aqua, "Uptrend Color")
+downColor = input.color(color.red, "Downtrend Color")
+lineColor = input.color(color.white, "Structure Line Color")
+lineWidth = input.int(2, "Line Width", minval = 1, maxval = 5)
+
+// ...（ユーザー提供コード内容）...
