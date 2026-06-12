@@ -1,0 +1,653 @@
+//@version=6
+strategy("HTF Elliott Pullback SL Strategy v1 Fib 20EMA Close Cross w0", overlay = true, max_labels_count = 100, max_lines_count = 100, pyramiding = 0, initial_capital = 100000, default_qty_type = strategy.percent_of_equity, default_qty_value = 10)
+
+htf = input.timeframe("60", "Environment Timeframe")
+entryTf = input.timeframe("5", "Entry Timeframe")
+
+leftBars  = input.int(6, "HTF Swing Left Bars", minval = 1)
+rightBars = input.int(6, "HTF Swing Right Bars", minval = 1)
+
+emaLen = input.int(20, "Entry EMA Length", minval = 1)
+riskReward = input.float(1.5, "Risk Reward", minval = 0.1, step = 0.1)
+useWave3 = input.bool(true, "Allow Entry During Wave 3")
+useWave4 = input.bool(true, "Allow Entry During Wave 4")
+useFibFilter = input.bool(true, "Require Fib 0.5 / 0.618 Pullback")
+showFibLevels = input.bool(true, "Show Fib 0.5 / 0.618 Levels")
+
+showTable         = input.bool(true, "Show Status Table")
+showRecentZigZag  = input.bool(true, "Show Recent HTF ZigZag")
+showPullbackLine  = input.bool(true, "Show Wave3 Pullback SL Line")
+showCandidateLine = input.bool(true, "Show Live Candidate Wave Line")
+
+upColor        = input.color(color.aqua, "Uptrend ZigZag Color")
+downColor      = input.color(color.red, "Downtrend ZigZag Color")
+slColor        = input.color(color.lime, "Wave3 Pullback SL Color")
+candidateColor = input.color(color.yellow, "Live Candidate Color")
+emaColor       = input.color(color.orange, "20 EMA Color")
+fib50Color     = input.color(color.new(color.blue, 0), "Fib 0.5 Color")
+fib618Color    = input.color(color.new(color.purple, 0), "Fib 0.618 Color")
+
+f_engine() =>
+    swingHigh = ta.pivothigh(high, leftBars, rightBars)
+    swingLow  = ta.pivotlow(low, leftBars, rightBars)
+
+    var int trend = 0
+    var int waveCount = 0
+
+    var float lastPrice = na
+    var float validHigh = na
+    var float validLow = na
+
+    var float pendingLowPrice = na
+    var int pendingLowTime = na
+
+    var float pendingHighPrice = na
+    var int pendingHighTime = na
+
+    var float latestSwingLowPrice = na
+    var int latestSwingLowTime = na
+
+    var float latestSwingHighPrice = na
+    var int latestSwingHighTime = na
+
+    var float liveLowPrice = na
+    var int liveLowTime = na
+
+    var float liveHighPrice = na
+    var int liveHighTime = na
+
+    var float pullbackSLPrice = na
+    var int pullbackSLTime = na
+
+    var int w0Time = na
+    var float w0Price = na
+    var int w1Time = na
+    var float w1Price = na
+    var int w2Time = na
+    var float w2Price = na
+    var int w3Time = na
+    var float w3Price = na
+    var int w4Time = na
+    var float w4Price = na
+    var int w5Time = na
+    var float w5Price = na
+
+    if not na(swingHigh)
+        int pivotTime = time[rightBars]
+        float pivotPrice = swingHigh
+
+        latestSwingHighPrice := pivotPrice
+        latestSwingHighTime := pivotTime
+
+        if na(lastPrice)
+            trend := 1
+            waveCount := 1
+            lastPrice := pivotPrice
+            validHigh := pivotPrice
+
+            if not na(latestSwingLowPrice)
+                w0Time := latestSwingLowTime
+                w0Price := latestSwingLowPrice
+
+            liveLowPrice := na
+            liveLowTime := na
+            liveHighPrice := na
+            liveHighTime := na
+
+            pullbackSLPrice := na
+            pullbackSLTime := na
+
+            w1Time := pivotTime
+            w1Price := pivotPrice
+            w2Time := na
+            w2Price := na
+            w3Time := na
+            w3Price := na
+            w4Time := na
+            w4Price := na
+            w5Time := na
+            w5Price := na
+        else
+            if trend == 1
+                if not na(validHigh) and pivotPrice > validHigh
+                    if not na(pendingLowPrice)
+                        waveCount += 1
+                        validLow := pendingLowPrice
+
+                        if waveCount == 2
+                            w2Time := pendingLowTime
+                            w2Price := pendingLowPrice
+
+                        if waveCount == 4
+                            w4Time := pendingLowTime
+                            w4Price := pendingLowPrice
+
+                        pendingLowPrice := na
+                        pendingLowTime := na
+
+                        waveCount += 1
+                        validHigh := pivotPrice
+
+                        if waveCount == 3
+                            w3Time := pivotTime
+                            w3Price := pivotPrice
+
+                            liveLowPrice := na
+                            liveLowTime := na
+
+                            if not na(latestSwingLowPrice)
+                                pullbackSLPrice := latestSwingLowPrice
+                                pullbackSLTime := latestSwingLowTime
+
+                        if waveCount == 5
+                            w5Time := pivotTime
+                            w5Price := pivotPrice
+                            liveLowPrice := na
+                            liveLowTime := na
+                    else
+                        validHigh := pivotPrice
+
+                        if waveCount == 1
+                            if not na(latestSwingLowPrice)
+                                w0Time := latestSwingLowTime
+                                w0Price := latestSwingLowPrice
+
+                            w1Time := pivotTime
+                            w1Price := pivotPrice
+
+                        if waveCount == 3
+                            w3Time := pivotTime
+                            w3Price := pivotPrice
+
+                        if waveCount == 5
+                            w5Time := pivotTime
+                            w5Price := pivotPrice
+
+                    lastPrice := pivotPrice
+
+            if trend == -1
+                if not na(validHigh) and pivotPrice > validHigh
+                    trend := 1
+                    waveCount := 1
+
+                    validHigh := pivotPrice
+                    pendingHighPrice := na
+                    pendingHighTime := na
+                    pendingLowPrice := na
+                    pendingLowTime := na
+                    lastPrice := pivotPrice
+
+                    if not na(latestSwingLowPrice)
+                        w0Time := latestSwingLowTime
+                        w0Price := latestSwingLowPrice
+                    else
+                        w0Time := na
+                        w0Price := na
+
+                    liveLowPrice := na
+                    liveLowTime := na
+                    liveHighPrice := na
+                    liveHighTime := na
+
+                    pullbackSLPrice := na
+                    pullbackSLTime := na
+
+                    w1Time := pivotTime
+                    w1Price := pivotPrice
+                    w2Time := na
+                    w2Price := na
+                    w3Time := na
+                    w3Price := na
+                    w4Time := na
+                    w4Price := na
+                    w5Time := na
+                    w5Price := na
+                else
+                    if na(pendingHighPrice) or pivotPrice > pendingHighPrice
+                        pendingHighPrice := pivotPrice
+                        pendingHighTime := pivotTime
+
+    if not na(swingLow)
+        int pivotTime = time[rightBars]
+        float pivotPrice = swingLow
+
+        latestSwingLowPrice := pivotPrice
+        latestSwingLowTime := pivotTime
+
+        if na(lastPrice)
+            trend := -1
+            waveCount := 1
+            lastPrice := pivotPrice
+            validLow := pivotPrice
+
+            if not na(latestSwingHighPrice)
+                w0Time := latestSwingHighTime
+                w0Price := latestSwingHighPrice
+
+            liveLowPrice := na
+            liveLowTime := na
+            liveHighPrice := na
+            liveHighTime := na
+
+            pullbackSLPrice := na
+            pullbackSLTime := na
+
+            w1Time := pivotTime
+            w1Price := pivotPrice
+            w2Time := na
+            w2Price := na
+            w3Time := na
+            w3Price := na
+            w4Time := na
+            w4Price := na
+            w5Time := na
+            w5Price := na
+        else
+            if trend == -1
+                if not na(validLow) and pivotPrice < validLow
+                    if not na(pendingHighPrice)
+                        waveCount += 1
+                        validHigh := pendingHighPrice
+
+                        if waveCount == 2
+                            w2Time := pendingHighTime
+                            w2Price := pendingHighPrice
+
+                        if waveCount == 4
+                            w4Time := pendingHighTime
+                            w4Price := pendingHighPrice
+
+                        pendingHighPrice := na
+                        pendingHighTime := na
+
+                        waveCount += 1
+                        validLow := pivotPrice
+
+                        if waveCount == 3
+                            w3Time := pivotTime
+                            w3Price := pivotPrice
+
+                            liveHighPrice := na
+                            liveHighTime := na
+
+                            if not na(latestSwingHighPrice)
+                                pullbackSLPrice := latestSwingHighPrice
+                                pullbackSLTime := latestSwingHighTime
+
+                        if waveCount == 5
+                            w5Time := pivotTime
+                            w5Price := pivotPrice
+                            liveHighPrice := na
+                            liveHighTime := na
+                    else
+                        validLow := pivotPrice
+
+                        if waveCount == 1
+                            if not na(latestSwingHighPrice)
+                                w0Time := latestSwingHighTime
+                                w0Price := latestSwingHighPrice
+
+                            w1Time := pivotTime
+                            w1Price := pivotPrice
+
+                        if waveCount == 3
+                            w3Time := pivotTime
+                            w3Price := pivotPrice
+
+                        if waveCount == 5
+                            w5Time := pivotTime
+                            w5Price := pivotPrice
+
+                    lastPrice := pivotPrice
+
+            if trend == 1
+                if not na(validLow) and pivotPrice < validLow
+                    trend := -1
+                    waveCount := 1
+
+                    validLow := pivotPrice
+                    pendingLowPrice := na
+                    pendingLowTime := na
+                    pendingHighPrice := na
+                    pendingHighTime := na
+                    lastPrice := pivotPrice
+
+                    if not na(latestSwingHighPrice)
+                        w0Time := latestSwingHighTime
+                        w0Price := latestSwingHighPrice
+                    else
+                        w0Time := na
+                        w0Price := na
+
+                    liveLowPrice := na
+                    liveLowTime := na
+                    liveHighPrice := na
+                    liveHighTime := na
+
+                    pullbackSLPrice := na
+                    pullbackSLTime := na
+
+                    w1Time := pivotTime
+                    w1Price := pivotPrice
+                    w2Time := na
+                    w2Price := na
+                    w3Time := na
+                    w3Price := na
+                    w4Time := na
+                    w4Price := na
+                    w5Time := na
+                    w5Price := na
+                else
+                    if na(pendingLowPrice) or pivotPrice < pendingLowPrice
+                        pendingLowPrice := pivotPrice
+                        pendingLowTime := pivotTime
+
+    if trend == 1
+        if waveCount == 1 or waveCount == 3
+            if na(liveLowPrice) or low < liveLowPrice
+                liveLowPrice := low
+                liveLowTime := time
+        else
+            liveLowPrice := na
+            liveLowTime := na
+
+    if trend == -1
+        if waveCount == 1 or waveCount == 3
+            if na(liveHighPrice) or high > liveHighPrice
+                liveHighPrice := high
+                liveHighTime := time
+        else
+            liveHighPrice := na
+            liveHighTime := na
+
+    float candidatePrice = na
+    int candidateTime = na
+    int candidateWave = na
+
+    if trend == 1 and waveCount == 1
+        candidatePrice := liveLowPrice
+        candidateTime := liveLowTime
+        candidateWave := 2
+
+    if trend == 1 and waveCount == 3
+        candidatePrice := liveLowPrice
+        candidateTime := liveLowTime
+        candidateWave := 4
+
+    if trend == -1 and waveCount == 1
+        candidatePrice := liveHighPrice
+        candidateTime := liveHighTime
+        candidateWave := 2
+
+    if trend == -1 and waveCount == 3
+        candidatePrice := liveHighPrice
+        candidateTime := liveHighTime
+        candidateWave := 4
+
+    [trend, waveCount, pullbackSLPrice, pullbackSLTime, candidatePrice, candidateTime, candidateWave, w0Time, w0Price, w1Time, w1Price, w2Time, w2Price, w3Time, w3Price, w4Time, w4Price, w5Time, w5Price]
+
+[htfTrend, htfWave, htfPullbackSL, htfPullbackSLTime, htfCandidate, htfCandidateTime, htfCandidateWave, w0t, w0p, w1t, w1p, w2t, w2p, w3t, w3p, w4t, w4p, w5t, w5p] = request.security(syminfo.tickerid, htf, f_engine(), lookahead = barmerge.lookahead_off)
+
+f_entryEngine() =>
+    emaValue = ta.ema(close, emaLen)
+    emaIsUp = emaValue > emaValue[1]
+    emaIsDown = emaValue < emaValue[1]
+    longCloseCross = ta.crossover(close, emaValue)
+    shortCloseCross = ta.crossunder(close, emaValue)
+    [close, high, low, emaValue, emaIsUp, emaIsDown, longCloseCross, shortCloseCross]
+
+[entryClose, entryHigh, entryLow, entryEma20, entryEmaUp, entryEmaDown, entryLongCross, entryShortCross] = request.security(syminfo.tickerid, entryTf, f_entryEngine(), lookahead = barmerge.lookahead_off)
+
+plot(entryEma20, "20 EMA Entry TF", color = emaColor, linewidth = 2)
+
+float fib50 = na
+float fib618 = na
+
+if htfTrend == 1 and not na(w2p) and not na(w3p) and w3p > w2p
+    float waveRange = w3p - w2p
+    fib50 := w3p - waveRange * 0.5
+    fib618 := w3p - waveRange * 0.618
+
+if htfTrend == -1 and not na(w2p) and not na(w3p) and w2p > w3p
+    float waveRange = w2p - w3p
+    fib50 := w3p + waveRange * 0.5
+    fib618 := w3p + waveRange * 0.618
+
+plot(showFibLevels ? fib50 : na, "Fib 0.5", color = fib50Color, linewidth = 2, style = plot.style_linebr)
+plot(showFibLevels ? fib618 : na, "Fib 0.618", color = fib618Color, linewidth = 2, style = plot.style_linebr)
+
+hasValidSL = not na(htfPullbackSL) and not na(htfPullbackSLTime)
+
+inTradeWave = false
+if useWave3 and htfWave == 3
+    inTradeWave := true
+if useWave4 and htfWave == 4
+    inTradeWave := true
+
+hasFibLevels = not na(fib50) and not na(fib618)
+
+longFibTouched = false
+if htfTrend == 1 and hasFibLevels
+    float fibUpper = math.max(fib50, fib618)
+    float fibLower = math.min(fib50, fib618)
+    if entryHigh >= fibLower and entryLow <= fibUpper
+        longFibTouched := true
+
+shortFibTouched = false
+if htfTrend == -1 and hasFibLevels
+    float fibUpper = math.max(fib50, fib618)
+    float fibLower = math.min(fib50, fib618)
+    if entryHigh >= fibLower and entryLow <= fibUpper
+        shortFibTouched := true
+
+var bool longFibReady = false
+var bool shortFibReady = false
+var int activeFibSLTime = na
+
+if hasValidSL
+    if na(activeFibSLTime) or htfPullbackSLTime != activeFibSLTime
+        activeFibSLTime := htfPullbackSLTime
+        longFibReady := false
+        shortFibReady := false
+else
+    activeFibSLTime := na
+    longFibReady := false
+    shortFibReady := false
+
+if inTradeWave and longFibTouched
+    longFibReady := true
+
+if inTradeWave and shortFibTouched
+    shortFibReady := true
+
+fibLongOk = not useFibFilter or longFibReady
+fibShortOk = not useFibFilter or shortFibReady
+
+longRisk = entryClose - htfPullbackSL
+shortRisk = htfPullbackSL - entryClose
+
+longTakeProfit = entryClose + longRisk * riskReward
+shortTakeProfit = entryClose - shortRisk * riskReward
+
+longStopOk = hasValidSL and htfPullbackSL < entryClose and longRisk > syminfo.mintick
+shortStopOk = hasValidSL and htfPullbackSL > entryClose and shortRisk > syminfo.mintick
+
+longSignal = htfTrend == 1 and inTradeWave and fibLongOk and entryEmaUp and entryLongCross and longStopOk and strategy.position_size == 0
+shortSignal = htfTrend == -1 and inTradeWave and fibShortOk and entryEmaDown and entryShortCross and shortStopOk and strategy.position_size == 0
+
+var int lastLongSLTime = na
+var int lastShortSLTime = na
+
+if longSignal
+    if na(lastLongSLTime) or htfPullbackSLTime != lastLongSLTime
+        strategy.entry("Long", strategy.long)
+        strategy.exit("Long Exit", "Long", stop = htfPullbackSL, limit = longTakeProfit)
+        lastLongSLTime := htfPullbackSLTime
+        longFibReady := false
+
+if shortSignal
+    if na(lastShortSLTime) or htfPullbackSLTime != lastShortSLTime
+        strategy.entry("Short", strategy.short)
+        strategy.exit("Short Exit", "Short", stop = htfPullbackSL, limit = shortTakeProfit)
+        lastShortSLTime := htfPullbackSLTime
+        shortFibReady := false
+
+string trendText = htfTrend == 1 ? "UP" : htfTrend == -1 ? "DOWN" : "UNKNOWN"
+string waveText = str.tostring(htfWave)
+string slText = na(htfPullbackSL) ? "N/A" : str.tostring(htfPullbackSL, format.mintick)
+string candidateName = na(htfCandidateWave) ? "N/A" : "候補" + str.tostring(htfCandidateWave)
+string candidateText = na(htfCandidate) ? "N/A" : candidateName + " " + str.tostring(htfCandidate, format.mintick)
+
+color zigzagColor = htfTrend == 1 ? upColor : htfTrend == -1 ? downColor : color.gray
+color trendColor = htfTrend == 1 ? upColor : htfTrend == -1 ? downColor : color.gray
+color waveBg = htfWave == 5 ? color.new(color.green, 0) : color.new(trendColor, 20)
+
+var table statusTable = table.new(position.top_right, 2, 7, border_width = 1)
+
+if showTable and barstate.islast
+    table.cell(statusTable, 0, 0, "HTF", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 0, htf, text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 0, 1, "Trend", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 1, trendText, text_color = color.white, bgcolor = trendColor)
+    table.cell(statusTable, 0, 2, "Wave", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 2, waveText, text_color = color.white, bgcolor = waveBg)
+    table.cell(statusTable, 0, 3, "Wave3 Pullback SL", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 3, slText, text_color = color.black, bgcolor = slColor)
+    table.cell(statusTable, 0, 4, "Live Candidate", text_color = color.black, bgcolor = candidateColor)
+    table.cell(statusTable, 1, 4, candidateText, text_color = color.black, bgcolor = candidateColor)
+    table.cell(statusTable, 0, 5, "20 EMA", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 5, entryEmaUp ? "UP" : entryEmaDown ? "DOWN" : "FLAT", text_color = color.white, bgcolor = entryEmaUp ? upColor : entryEmaDown ? downColor : color.gray)
+    table.cell(statusTable, 0, 6, "Fib Ready", text_color = color.white, bgcolor = color.black)
+    table.cell(statusTable, 1, 6, longFibReady ? "LONG" : shortFibReady ? "SHORT" : "WAIT", text_color = color.white, bgcolor = longFibReady ? upColor : shortFibReady ? downColor : color.gray)
+
+f_newLine(int x1, float y1, int x2, float y2, color c, string st, int w) =>
+    line.new(x1, y1, x2, y2, xloc = xloc.bar_time, color = c, width = w, style = st == "dashed" ? line.style_dashed : st == "dotted" ? line.style_dotted : line.style_solid)
+
+f_newLabel(int x, float y, string txt, color c, int pivotType) =>
+    label.new(x, y, txt, xloc = xloc.bar_time, style = pivotType == 1 ? label.style_label_down : label.style_label_up, color = color.new(c, 75), textcolor = c, size = size.small)
+
+var line l01 = na
+var line l12 = na
+var line l23 = na
+var line l34 = na
+var line l45 = na
+var line slLine = na
+var line candidateZig = na
+var line candidateLine = na
+
+var label lb0 = na
+var label lb1 = na
+var label lb2 = na
+var label lb3 = na
+var label lb4 = na
+var label lb5 = na
+var label lbCandidate = na
+var label lbSL = na
+var label fib50Label = na
+var label fib618Label = na
+
+if barstate.islast
+    if not na(l01)
+        line.delete(l01)
+        l01 := na
+    if not na(l12)
+        line.delete(l12)
+        l12 := na
+    if not na(l23)
+        line.delete(l23)
+        l23 := na
+    if not na(l34)
+        line.delete(l34)
+        l34 := na
+    if not na(l45)
+        line.delete(l45)
+        l45 := na
+    if not na(slLine)
+        line.delete(slLine)
+        slLine := na
+    if not na(candidateZig)
+        line.delete(candidateZig)
+        candidateZig := na
+    if not na(candidateLine)
+        line.delete(candidateLine)
+        candidateLine := na
+
+    if not na(lb0)
+        label.delete(lb0)
+        lb0 := na
+    if not na(lb1)
+        label.delete(lb1)
+        lb1 := na
+    if not na(lb2)
+        label.delete(lb2)
+        lb2 := na
+    if not na(lb3)
+        label.delete(lb3)
+        lb3 := na
+    if not na(lb4)
+        label.delete(lb4)
+        lb4 := na
+    if not na(lb5)
+        label.delete(lb5)
+        lb5 := na
+    if not na(lbCandidate)
+        label.delete(lbCandidate)
+        lbCandidate := na
+    if not na(lbSL)
+        label.delete(lbSL)
+        lbSL := na
+    if not na(fib50Label)
+        label.delete(fib50Label)
+        fib50Label := na
+    if not na(fib618Label)
+        label.delete(fib618Label)
+        fib618Label := na
+
+    if showRecentZigZag
+        if not na(w0t) and not na(w1t)
+            l01 := f_newLine(w0t, w0p, w1t, w1p, zigzagColor, "solid", 2)
+        if not na(w1t) and not na(w2t)
+            l12 := f_newLine(w1t, w1p, w2t, w2p, zigzagColor, "solid", 2)
+        if not na(w2t) and not na(w3t)
+            l23 := f_newLine(w2t, w2p, w3t, w3p, zigzagColor, "solid", 2)
+        if not na(w3t) and not na(w4t)
+            l34 := f_newLine(w3t, w3p, w4t, w4p, zigzagColor, "solid", 2)
+        if not na(w4t) and not na(w5t)
+            l45 := f_newLine(w4t, w4p, w5t, w5p, zigzagColor, "solid", 2)
+
+        if not na(w0t)
+            lb0 := f_newLabel(w0t, w0p, "0", zigzagColor, htfTrend == 1 ? -1 : 1)
+        if not na(w1t)
+            lb1 := f_newLabel(w1t, w1p, "1", zigzagColor, htfTrend == 1 ? 1 : -1)
+        if not na(w2t)
+            lb2 := f_newLabel(w2t, w2p, "2", zigzagColor, htfTrend == 1 ? -1 : 1)
+        if not na(w3t)
+            lb3 := f_newLabel(w3t, w3p, "3", zigzagColor, htfTrend == 1 ? 1 : -1)
+        if not na(w4t)
+            lb4 := f_newLabel(w4t, w4p, "4", zigzagColor, htfTrend == 1 ? -1 : 1)
+        if not na(w5t)
+            lb5 := f_newLabel(w5t, w5p, "5", zigzagColor, htfTrend == 1 ? 1 : -1)
+
+    if showPullbackLine and not na(htfPullbackSL) and not na(htfPullbackSLTime)
+        slLine := f_newLine(htfPullbackSLTime, htfPullbackSL, time, htfPullbackSL, slColor, "solid", 3)
+        line.set_extend(slLine, extend.right)
+        lbSL := f_newLabel(htfPullbackSLTime, htfPullbackSL, "Wave3 Pullback SL", slColor, htfTrend == 1 ? -1 : 1)
+
+    if showCandidateLine and not na(htfCandidate) and not na(htfCandidateTime)
+        string candidateLabel = na(htfCandidateWave) ? "候補" : "候補" + str.tostring(htfCandidateWave)
+
+        if htfCandidateWave == 2 and not na(w1t)
+            candidateZig := f_newLine(w1t, w1p, htfCandidateTime, htfCandidate, candidateColor, "dashed", 2)
+
+        if htfCandidateWave == 4 and not na(w3t)
+            candidateZig := f_newLine(w3t, w3p, htfCandidateTime, htfCandidate, candidateColor, "dashed", 2)
+
+        candidateLine := f_newLine(htfCandidateTime, htfCandidate, time, htfCandidate, candidateColor, "dashed", 2)
+        line.set_extend(candidateLine, extend.right)
+        lbCandidate := f_newLabel(htfCandidateTime, htfCandidate, candidateLabel, candidateColor, htfTrend == 1 ? -1 : 1)
+
+    if showFibLevels and not na(fib50)
+        fib50Label := label.new(time, fib50, "Fib 0.5", xloc = xloc.bar_time, style = label.style_label_left, color = fib50Color, textcolor = color.white, size = size.small)
+
+    if showFibLevels and not na(fib618)
+        fib618Label := label.new(time, fib618, "Fib 0.618", xloc = xloc.bar_time, style = label.style_label_left, color = fib618Color, textcolor = color.white, size = size.small)
